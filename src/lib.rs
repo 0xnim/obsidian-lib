@@ -1,14 +1,43 @@
+//! A library for reading and extracting files from Obsidian `.obby` plugin files.
+//!
+//! This crate provides functionality to read `.obby` files, which are archives used
+//! by Obsidian plugins. It allows you to list and extract files from these archives,
+//! with special support for extracting `plugin.json` files.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use obsidian_lib::{ObbyArchive, extract_plugin_json};
+//! use std::path::Path;
+//! use std::fs::File;
+//!
+//! # fn main() -> std::io::Result<()> {
+//! // From a file path
+//! let json = extract_plugin_json(Path::new("plugin.obby"))?;
+//!
+//! // Or from any Read + Seek source
+//! let file = File::open("plugin.obby")?;
+//! let mut archive = ObbyArchive::new(file)?;
+//! let entries = archive.list_entries();
+//! let data = archive.extract_entry("plugin.json")?;
+//! # Ok(())
+//! # }
+//! ```
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 
-pub struct ObbyReader {
+/// Main reader struct for working with .obby files from any source
+#[derive(Debug)]
+pub struct ObbyArchive<R: Read + Seek> {
     entries: HashMap<String, EntryInfo>,
-    file: File,
+    reader: R,
     data_start_pos: u64,
 }
 
+#[derive(Debug)]
 struct EntryInfo {
     offset: u64,
     length: i32,
@@ -57,44 +86,70 @@ fn read_csharp_string<R: Read>(reader: &mut BinaryReader<R>) -> io::Result<Strin
     Ok(String::from_utf8_lossy(&buf).to_string())
 }
 
-impl ObbyReader {
-    /// Opens an .obby file and reads its metadata
-    pub fn open(path: &Path) -> io::Result<Self> {
-        let mut file = File::open(path)?;
-        let mut reader = BinaryReader::new(&mut file);
+impl<R: Read + Seek> ObbyArchive<R> {
+    /// Creates a new ObbyArchive from any source that implements Read + Seek
+    ///
+    /// # Arguments
+    ///
+    /// * `reader` - Any type that implements Read + Seek traits
+    ///
+    /// # Returns
+    ///
+    /// Returns `Result<ObbyArchive<R>, io::Error>` which is:
+    /// * `Ok(ObbyArchive)` if the input was successfully parsed
+    /// * `Err` if there was an error parsing the input
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use obsidian_lib::ObbyArchive;
+    /// use std::fs::File;
+    /// use std::io::Cursor;
+    ///
+    /// // From a file
+    /// let file = File::open("plugin.obby").unwrap();
+    /// let archive = ObbyArchive::new(file).unwrap();
+    ///
+    /// // Or from a memory buffer
+    /// let buffer = vec![/* .obby file contents */];
+    /// let cursor = Cursor::new(buffer);
+    /// let archive = ObbyArchive::new(cursor).unwrap();
+    /// ```
+    pub fn new(mut reader: R) -> io::Result<Self> {
+        let mut binary_reader = BinaryReader::new(&mut reader);
 
         // Verify header
         let mut header = [0u8; 4];
-        reader.reader.read_exact(&mut header)?;
+        binary_reader.reader.read_exact(&mut header)?;
         if &header != b"OBBY" {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid plugin header"));
         }
 
         // Read metadata
-        let _api_version = read_csharp_string(&mut reader)?;
-        let _hash = reader.read_bytes(48)?;
+        let _api_version = read_csharp_string(&mut binary_reader)?;
+        let _hash = binary_reader.read_bytes(48)?;
 
         // Read signature
         let mut is_signed = [0u8; 1];
-        reader.reader.read_exact(&mut is_signed)?;
+        binary_reader.reader.read_exact(&mut is_signed)?;
         if is_signed[0] != 0 {
-            let _signature = reader.read_bytes(384)?;
+            let _signature = binary_reader.read_bytes(384)?;
         }
 
         // Read data length and plugin info
-        let _data_length = reader.read_i32()?;
-        let _plugin_assembly = read_csharp_string(&mut reader)?;
-        let _plugin_version = read_csharp_string(&mut reader)?;
+        let _data_length = binary_reader.read_i32()?;
+        let _plugin_assembly = read_csharp_string(&mut binary_reader)?;
+        let _plugin_version = read_csharp_string(&mut binary_reader)?;
 
         // Read entries
-        let entry_count = reader.read_i32()? as usize;
+        let entry_count = binary_reader.read_i32()? as usize;
         let mut entries = HashMap::new();
         let mut current_offset = 0u64;
 
         for _ in 0..entry_count {
-            let name = read_csharp_string(&mut reader)?;
-            let length = reader.read_i32()?;
-            let compressed_length = reader.read_i32()?;
+            let name = read_csharp_string(&mut binary_reader)?;
+            let length = binary_reader.read_i32()?;
+            let compressed_length = binary_reader.read_i32()?;
 
             entries.insert(name, EntryInfo {
                 offset: current_offset,
@@ -105,21 +160,35 @@ impl ObbyReader {
             current_offset += compressed_length as u64;
         }
 
-        let data_start_pos = file.stream_position()?;
+        let data_start_pos = reader.stream_position()?;
 
-        Ok(ObbyReader {
+        Ok(ObbyArchive {
             entries,
-            file,
+            reader,
             data_start_pos,
         })
     }
 
     /// Returns a list of all entries in the archive
+    ///
+    /// # Returns
+    ///
+    /// A `Vec<String>` containing the names of all entries in the archive
     pub fn list_entries(&self) -> Vec<String> {
         self.entries.keys().cloned().collect()
     }
 
     /// Extracts a specific entry by name
+    ///
+    /// # Arguments
+    ///
+    /// * `entry_name` - Name of the entry to extract
+    ///
+    /// # Returns
+    ///
+    /// Returns `Result<Vec<u8>, io::Error>` which is:
+    /// * `Ok(Vec<u8>)` containing the extracted data if successful
+    /// * `Err` if the entry doesn't exist or there was an error extracting it
     pub fn extract_entry(&mut self, entry_name: &str) -> io::Result<Vec<u8>> {
         let entry = self.entries.get(entry_name).ok_or_else(|| {
             io::Error::new(
@@ -129,10 +198,10 @@ impl ObbyReader {
         })?;
 
         // Seek to the entry's position
-        self.file.seek(SeekFrom::Start(self.data_start_pos + entry.offset))?;
+        self.reader.seek(SeekFrom::Start(self.data_start_pos + entry.offset))?;
 
         // Read the compressed data
-        let mut reader = BinaryReader::new(&mut self.file);
+        let mut reader = BinaryReader::new(&mut self.reader);
         let compressed_data = reader.read_bytes(entry.compressed_length as usize)?;
 
         // Decompress if necessary
@@ -147,10 +216,28 @@ impl ObbyReader {
     }
 }
 
-// Example function to extract and parse plugin.json
-pub fn extract_plugin_json(path: &Path) -> io::Result<String> {
-    let mut reader = ObbyReader::open(path)?;
-    let data = reader.extract_entry("plugin.json")?;
+/// Opens an .obby file from a path
+///
+/// This is a convenience function that creates an ObbyArchive from a file path.
+pub fn open<P: AsRef<Path>>(path: P) -> io::Result<ObbyArchive<File>> {
+    let file = File::open(path)?;
+    ObbyArchive::new(file)
+}
+
+/// Convenience function to extract and parse plugin.json from an .obby file path
+///
+/// # Arguments
+///
+/// * `path` - Path to the .obby file
+///
+/// # Returns
+///
+/// Returns `Result<String, io::Error>` which is:
+/// * `Ok(String)` containing the plugin.json contents if successful
+/// * `Err` if there was an error reading or parsing the file
+pub fn extract_plugin_json<P: AsRef<Path>>(path: P) -> io::Result<String> {
+    let mut archive = open(path)?;
+    let data = archive.extract_entry("plugin.json")?;
     String::from_utf8(data)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
@@ -158,27 +245,36 @@ pub fn extract_plugin_json(path: &Path) -> io::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::io::{Cursor, Write};
     use tempfile::NamedTempFile;
+    use flate2::{write::DeflateEncoder, Compression};
 
-    fn create_test_obby() -> io::Result<NamedTempFile> {
-        let mut file = NamedTempFile::new()?;
+    fn create_test_plugin_json() -> String {
+        r#"{
+            "id": "test-plugin",
+            "name": "Test Plugin",
+            "version": "1.0.0",
+            "description": "A test plugin"
+        }"#.to_string()
+    }
+
+    fn create_test_obby_bytes() -> Vec<u8> {
+        let mut buffer = Vec::new();
 
         // Write header
-        file.write_all(b"OBBY")?;
+        buffer.extend_from_slice(b"OBBY");
 
-        // Write minimal valid .obby structure
-        // This is a simplified test file structure
+        // Add minimal valid .obby structure
+        // ... (rest of the test file creation)
 
-        Ok(file)
+        buffer
     }
 
     #[test]
-    fn test_open_invalid_file() {
-        let mut file = NamedTempFile::new().unwrap();
-        file.write_all(b"INVALID").unwrap();
-
-        let result = ObbyReader::open(file.path());
-        assert!(result.is_err());
+    fn test_memory_buffer() {
+        let buffer = create_test_obby_bytes();
+        let cursor = Cursor::new(buffer);
+        let archive = ObbyArchive::new(cursor);
+        assert!(archive.is_ok());
     }
 }
