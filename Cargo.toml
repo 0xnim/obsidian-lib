@@ -1,6 +1,6 @@
 [package]
 name = "obsidian-lib"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Niklas Wojtkowiak <niklas@wojtkowiak.com>"]
 description = "A library for reading and extracting files from Obsidian .obby plugin files"
