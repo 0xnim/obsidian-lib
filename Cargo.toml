@@ -1,0 +1,19 @@
+[package]
+name = "obsidian-lib"
+version = "0.1.0"
+edition = "2021"
+authors = ["Niklas Wojtkowiak <niklas@wojtkowiak.com>"]
+description = "A library for reading and extracting files from Obsidian .obby plugin files"
+license = "MIT"
+repository = "https://github.com/0xnim/obsidian-lib"
+documentation = "https://docs.rs/obsidian-lib"
+readme = "README.md"
+keywords = ["obsidian", "plugin", "archive", "reader"]
+categories = ["compression", "parser-implementations"]
+
+
+[dependencies]
+flate2 = "1.0.25"
+
+[dev-dependencies]
+tempfile = "3.3.0"
