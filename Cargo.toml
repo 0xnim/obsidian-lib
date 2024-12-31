@@ -11,9 +11,25 @@ readme = "README.md"
 keywords = ["obsidian", "plugin", "archive", "reader"]
 categories = ["compression", "parser-implementations"]
 
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = ["wasm"]
+wasm = ["wasm-bindgen", "js-sys", "web-sys"]
+
 
 [dependencies]
 flate2 = "1.0.25"
+wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
+web-sys = { version = "0.3", features = ["File", "Blob"], optional = true }
+wasm-bindgen-futures = "0.4.49"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["File", "Blob"] }
 
 [dev-dependencies]
 tempfile = "3.3.0"

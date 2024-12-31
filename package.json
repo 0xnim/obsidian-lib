@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "build": "wasm-pack build --target web",
+    "build:node": "wasm-pack build --target nodejs",
+    "test": "wasm-pack test --node"
+  }
+}

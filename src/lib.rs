@@ -224,6 +224,60 @@ pub fn open<P: AsRef<Path>>(path: P) -> io::Result<ObbyArchive<File>> {
     ObbyArchive::new(file)
 }
 
+#[cfg(feature = "wasm")]
+use wasm_bindgen::prelude::*;
+#[cfg(feature = "wasm")]
+use std::io::Cursor;
+use js_sys::Uint8Array;
+
+// Re-export the core functionality with wasm-bindgen
+#[wasm_bindgen]
+pub struct WasmObbyArchive {
+    inner: ObbyArchive<Cursor<Vec<u8>>>
+}
+
+#[wasm_bindgen]
+impl WasmObbyArchive {
+    #[wasm_bindgen(constructor)]
+    pub fn new(buffer: &[u8]) -> Result<WasmObbyArchive, JsValue> {
+        let cursor = Cursor::new(buffer.to_vec());
+        let inner = ObbyArchive::new(cursor)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        Ok(WasmObbyArchive { inner })
+    }
+
+    #[wasm_bindgen]
+    pub fn list_entries(&self) -> Box<[JsValue]> {
+        self.inner
+            .list_entries()
+            .into_iter()
+            .map(JsValue::from)
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+    }
+
+    #[wasm_bindgen]
+    pub fn extract_entry(&mut self, entry_name: &str) -> Result<Uint8Array, JsValue> {
+        let data = self.inner
+            .extract_entry(entry_name)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        Ok(Uint8Array::from(&data[..]))
+    }
+
+    #[wasm_bindgen]
+    pub fn extract_plugin_json(&mut self) -> Result<String, JsValue> {
+        let data = self.extract_entry("plugin.json")?;
+        let text = String::from_utf8(data.to_vec())
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(text)
+    }
+}
+
+
+
+
 /// Convenience function to extract and parse plugin.json from an .obby file path
 ///
 /// # Arguments
