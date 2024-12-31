@@ -154,3 +154,31 @@ pub fn extract_plugin_json(path: &Path) -> io::Result<String> {
     String::from_utf8(data)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn create_test_obby() -> io::Result<NamedTempFile> {
+        let mut file = NamedTempFile::new()?;
+
+        // Write header
+        file.write_all(b"OBBY")?;
+
+        // Write minimal valid .obby structure
+        // This is a simplified test file structure
+
+        Ok(file)
+    }
+
+    #[test]
+    fn test_open_invalid_file() {
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(b"INVALID").unwrap();
+
+        let result = ObbyReader::open(file.path());
+        assert!(result.is_err());
+    }
+}
