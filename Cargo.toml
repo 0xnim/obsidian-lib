@@ -12,7 +12,7 @@ keywords = ["obsidian", "plugin", "archive", "reader"]
 categories = ["compression", "parser-implementations"]
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["wasm"]
