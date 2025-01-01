@@ -3,13 +3,24 @@ use std::io::Seek;
 use obsidian_lib::ObbyArchive;
 use std::fs::File;
 use std::io::{self, Read, Cursor};
+use std::env;
 
 fn main() -> io::Result<()> {
+    // Parse command-line arguments
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() != 2 {
+        eprintln!("Usage: {} <file_path>", args[0]);
+        return Ok(());
+    }
+
+    let path = &args[1];
+
     // Example 1: Reading into memory buffer
     println!("Example 1: Memory Buffer");
     {
         // Read the entire .obby file into memory
-        let mut file = File::open("./test_dir/ObsidianPlugin.obby")?;
+        let mut file = File::open(path)?;
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer)?;
 
@@ -32,11 +43,7 @@ fn main() -> io::Result<()> {
     // Example 2: Simulated network stream (using a local file for demonstration)
     println!("\nExample 2: Network Stream Simulation");
     {
-        // In a real network scenario, you might have something like:
-        // let response = reqwest::blocking::get("https://example.com/plugin.obby")?;
-        // let reader = response.bytes()?;
-
-        // For demonstration, we'll create a "stream" from the local file
+        // Simulated chunked reader
         struct ChunkedReader {
             file: File,
             position: u64,
@@ -55,7 +62,7 @@ fn main() -> io::Result<()> {
             }
         }
 
-        let file = File::open("./test_dir/ObsidianPlugin.obby")?;
+        let file = File::open(path)?;
         let reader = ChunkedReader {
             file,
             position: 0,
