@@ -24,6 +24,12 @@ obsidian-lib = "0.1.0"
 
 ## Usage
 
+CLI: 
+`obsidian-lib ./ObsidianPlugin.obby`
+
+You can find an example plugin on [![Harbr]https://harbr.dev/plugin/obsidian-vault]
+
+
 ```rust
 use obsidian_lib::{ObbyReader, extract_plugin_json};
 use std::path::Path;
