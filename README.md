@@ -27,7 +27,7 @@ obsidian-lib = "0.1.0"
 CLI: 
 `obsidian-lib ./ObsidianPlugin.obby`
 
-You can find an example plugin on [![Harbr](https://harbr.dev/plugin/obsidian-vault)]
+You can find an example plugin on [Harbr](https://harbr.dev/plugin/obsidian-vault)
 
 
 ```rust
